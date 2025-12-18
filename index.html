@@ -181,8 +181,8 @@
         
         <div class="controls">
             <button id="playBtn" style="padding: 8px 16px; font-size: 14px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">▶ 再生</button>
-            <input type="range" id="yearSlider" min="0" max="64" value="64" step="1">
-            <div class="year-display" id="yearDisplay">2024</div>
+            <input type="range" id="yearSlider" min="0" max="64" value="0" step="1">
+            <div class="year-display" id="yearDisplay">1960</div>
         </div>
         
         <div class="stats">
@@ -333,7 +333,7 @@
         };
         
         let geoData = null;
-        let currentYearIndex = 64;
+        let currentYearIndex = 0;
         let isPlaying = false;
         let playInterval = null;
         
@@ -572,9 +572,9 @@
                 this.textContent = "⏸ 停止";
                 isPlaying = true;
                 playInterval = setInterval(() => {
-                    let nextIndex = currentYearIndex - 1;
-                    if (nextIndex < 0) {
-                        nextIndex = 64;
+                    let nextIndex = currentYearIndex + 1;
+                    if (nextIndex > 64) {
+                        nextIndex = 0;
                     }
                     document.getElementById("yearSlider").value = nextIndex;
                     updateMap();
