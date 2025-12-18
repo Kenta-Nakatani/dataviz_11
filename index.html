@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日本のGDP成長 - 国土面積で見る成長</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/topojson@3"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 100%;
+            margin: 0;
+            background: white;
+            border-radius: 0;
+            padding: 15px 20px 20px;
+            box-shadow: none;
+            min-height: 100vh;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 12px;
+        }
+        .controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .year-display {
+            font-size: 20px;
+            font-weight: bold;
+            color: #667eea;
+            min-width: 80px;
+            text-align: center;
+        }
+        input[type="range"] {
+            width: 300px;
+            height: 6px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            border: none;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .stat-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 150px;
+            text-align: center;
+        }
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+        .stat-value {
+            font-size: 22px;
+            font-weight: bold;
+        }
+        #map {
+            width: 100%;
+            height: calc(100vh - 350px);
+            min-height: 500px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: #f5f5f5;
+        }
+        .prefecture {
+            stroke: #fff;
+            stroke-width: 0.5;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+        .prefecture:hover {
+            opacity: 0.8;
+        }
+        .prefecture.highlighted {
+            stroke: #333;
+            stroke-width: 2;
+        }
+        .main-content {
+            display: flex;
+            gap: 24px;
+            align-items: stretch;
+            margin-top: 10px;
+        }
+        .explanation {
+            flex: 0 0 340px;
+            max-width: 380px;
+            font-size: 14px;
+            line-height: 1.8;
+            color: #444;
+        }
+        .explanation-title {
+            font-weight: bold;
+            font-size: 15px;
+            margin-bottom: 6px;
+            color: #333;
+        }
+        .explanation-point {
+            margin-bottom: 6px;
+        }
+        .legend {
+            margin-top: 15px;
+            text-align: center;
+        }
+        .legend-item {
+            display: inline-block;
+            margin: 0 12px;
+            font-size: 12px;
+        }
+        .legend-color {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+            font-size: 12px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🇯🇵 日本のGDP成長 - 国土面積で見る成長</h1>
+        <p class="subtitle">現在のGDP（2024年）を100%として、過去のGDPが国土の何%に相当するかを視覚化</p>
+        
+        <div class="controls">
+            <button id="playBtn" style="padding: 8px 16px; font-size: 14px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">▶ 再生</button>
+            <input type="range" id="yearSlider" min="0" max="64" value="64" step="1">
+            <div class="year-display" id="yearDisplay">2024</div>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-label">選択年のGDP</div>
+                <div class="stat-value" id="currentGDP">$4.03兆</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">現在のGDPに対する割合</div>
+                <div class="stat-value" id="gdpRatio">100.0%</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">国土面積に換算</div>
+                <div class="stat-value" id="areaRatio">100.0%</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">日本列島換算</div>
+                <div class="stat-value" id="japanCount">1.00個</div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="explanation">
+                <div class="explanation-title">この図の意図</div>
+                <div class="explanation-point">
+                    ・<strong>今の日本のGDP（2024年）を「日本列島1個ぶん」</strong>として固定し、<br>
+                    　過去のGDPがその何個分・何％分にあたるかを、<strong>国土の面積</strong>で表現しています。
+                </div>
+                <div class="explanation-point">
+                    ・スライダーで年を動かすと、<strong>緑の面積</strong>が増減し、<br>
+                    　「この年の日本は、今と比べて国土何県ぶん成長／縮小したか」という感覚で見られます。
+                </div>
+                <div class="explanation-point">
+                    ・左から右に、日本列島が<strong>1個、2個、3個…</strong>と並ぶことで、<br>
+                    　「高度成長期には、日本が丸ごと何個分にも膨らんだ」<br>
+                    　というイメージを直感的に掴めるようにしています。
+                </div>
+                <div class="explanation-point">
+                    ・都道府県は<strong>面積が近い県どうしをグループ化</strong>して塗り分けており、<br>
+                    　北海道だけが極端に大きく見えすぎないように工夫しています。
+                </div>
+            </div>
+            <div style="flex: 1; min-width: 0;">
+                <div id="map"></div>
+                
+                <div class="legend">
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #4CAF50;"></span>
+                        該当年のGDPに相当する都道府県
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #E0E0E0;"></span>
+                        該当年のGDPに相当しない都道府県
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="tooltip" id="tooltip" style="display: none;"></div>
+    
+    <script>
+        // GDPデータ（1960-2024）- CSVから抽出
+        const gdpData = [
+            47419238274, 57266758180, 64987857542, 74379284603, 87490590818, 97338107606,
+            113047000000, 132476000000, 156897000000, 184299000000, 217224000000, 245364000000,
+            324934000000, 441461000000, 490036000000, 532861000000, 598884000000, 737069000000,
+            1035610000000, 1077910000000, 1129380000000, 1245220000000, 1158730000000, 1270860000000,
+            1345820000000, 1427020000000, 2120080000000, 2580750000000, 3125720000000, 3109460000000,
+            3185900000000, 3648070000000, 3980700000000, 4536940000000, 4998800000000, 5545560000000,
+            4923390000000, 4492450000000, 4098360000000, 4635980000000, 4968360000000, 4374710000000,
+            4182850000000, 4519560000000, 4893120000000, 4831470000000, 4601660000000, 4579750000000,
+            5106680000000, 5289490000000, 5759070000000, 6233150000000, 6272360000000, 5212330000000,
+            4896990000000, 4444930000000, 5003680000000, 4930840000000, 5040880000000, 5117990000000,
+            5054070000000, 5039150000000, 4262460000000, 4213170000000, 4026210000000
+        ];
+        
+        const years = Array.from({length: 65}, (_, i) => 1960 + i);
+        const currentGDP = gdpData[gdpData.length - 1]; // 2024年のGDP
+        
+        // 都道府県の面積データ（km²）- 大きい順
+        const prefectureAreas = [
+            {name: "Hokkaido", area: 83424, jpName: "北海道"},
+            {name: "Iwate", area: 15275, jpName: "岩手県"},
+            {name: "Fukushima", area: 13784, jpName: "福島県"},
+            {name: "Nagano", area: 13562, jpName: "長野県"},
+            {name: "Niigata", area: 12584, jpName: "新潟県"},
+            {name: "Akita", area: 11637, jpName: "秋田県"},
+            {name: "Gifu", area: 10621, jpName: "岐阜県"},
+            {name: "Aomori", area: 9646, jpName: "青森県"},
+            {name: "Yamagata", area: 9323, jpName: "山形県"},
+            {name: "Kochi", area: 7104, jpName: "高知県"},
+            {name: "Kumamoto", area: 7409, jpName: "熊本県"},
+            {name: "Kagoshima", area: 9187, jpName: "鹿児島県"},
+            {name: "Miyazaki", area: 7735, jpName: "宮崎県"},
+            {name: "Oita", area: 6341, jpName: "大分県"},
+            {name: "Shimane", area: 6708, jpName: "島根県"},
+            {name: "Miyagi", area: 7282, jpName: "宮城県"},
+            {name: "Okayama", area: 7113, jpName: "岡山県"},
+            {name: "Hiroshima", area: 8479, jpName: "広島県"},
+            {name: "Yamaguchi", area: 6112, jpName: "山口県"},
+            {name: "Tochigi", area: 6408, jpName: "栃木県"},
+            {name: "Gunma", area: 6362, jpName: "群馬県"},
+            {name: "Ibaraki", area: 6097, jpName: "茨城県"},
+            {name: "Shizuoka", area: 7777, jpName: "静岡県"},
+            {name: "Aichi", area: 5173, jpName: "愛知県"},
+            {name: "Mie", area: 5774, jpName: "三重県"},
+            {name: "Wakayama", area: 4726, jpName: "和歌山県"},
+            {name: "Nara", area: 3691, jpName: "奈良県"},
+            {name: "Hyogo", area: 8401, jpName: "兵庫県"},
+            {name: "Kyoto", area: 4612, jpName: "京都府"},
+            {name: "Osaka", area: 1905, jpName: "大阪府"},
+            {name: "Shiga", area: 4017, jpName: "滋賀県"},
+            {name: "Fukui", area: 4190, jpName: "福井県"},
+            {name: "Ishikawa", area: 4186, jpName: "石川県"},
+            {name: "Toyama", area: 4247, jpName: "富山県"},
+            {name: "Yamanashi", area: 4465, jpName: "山梨県"},
+            {name: "Kanagawa", area: 2416, jpName: "神奈川県"},
+            {name: "Tokyo", area: 2194, jpName: "東京都"},
+            {name: "Chiba", area: 5157, jpName: "千葉県"},
+            {name: "Saitama", area: 3798, jpName: "埼玉県"},
+            {name: "Fukuoka", area: 4986, jpName: "福岡県"},
+            {name: "Saga", area: 2440, jpName: "佐賀県"},
+            {name: "Nagasaki", area: 4131, jpName: "長崎県"},
+            {name: "Okinawa", area: 2281, jpName: "沖縄県"},
+            {name: "Ehime", area: 5676, jpName: "愛媛県"},
+            {name: "Tokushima", area: 4147, jpName: "徳島県"},
+            {name: "Kagawa", area: 1877, jpName: "香川県"},
+            {name: "Tottori", area: 3507, jpName: "鳥取県"}
+        ];
+        
+        const totalArea = prefectureAreas.reduce((sum, p) => sum + p.area, 0);
+        
+        // 都道府県名のマッピング（GeoJSONのNAME_1と日本語名の対応）
+        const prefectureNameMap = {
+            "Aichi": "愛知県", "Akita": "秋田県", "Aomori": "青森県", "Chiba": "千葉県",
+            "Ehime": "愛媛県", "Fukui": "福井県", "Fukuoka": "福岡県", "Fukushima": "福島県",
+            "Gifu": "岐阜県", "Gunma": "群馬県", "Hiroshima": "広島県", "Hokkaido": "北海道",
+            "Hyogo": "兵庫県", "Ibaraki": "茨城県", "Ishikawa": "石川県", "Iwate": "岩手県",
+            "Kagawa": "香川県", "Kagoshima": "鹿児島県", "Kanagawa": "神奈川県", "Kochi": "高知県",
+            "Kumamoto": "熊本県", "Kyoto": "京都府", "Mie": "三重県", "Miyagi": "宮城県",
+            "Miyazaki": "宮崎県", "Nagano": "長野県", "Nagasaki": "長崎県", "Nara": "奈良県",
+            "Niigata": "新潟県", "Oita": "大分県", "Okayama": "岡山県", "Okinawa": "沖縄県",
+            "Osaka": "大阪府", "Saga": "佐賀県", "Saitama": "埼玉県", "Shiga": "滋賀県",
+            "Shimane": "島根県", "Shizuoka": "静岡県", "Tochigi": "栃木県", "Tokushima": "徳島県",
+            "Tokyo": "東京都", "Tottori": "鳥取県", "Toyama": "富山県", "Wakayama": "和歌山県",
+            "Yamagata": "山形県", "Yamaguchi": "山口県", "Yamanashi": "山梨県"
+        };
+        
+        let geoData = null;
+        let currentYearIndex = 64;
+        let isPlaying = false;
+        let playInterval = null;
+        
+        const mapElement = document.getElementById("map");
+        let width = mapElement.clientWidth || 900;
+        let height = mapElement.clientHeight || 600;
+        const maxJapanCopies = 3; // 画面に同時に描画する最大の日本列島の数
+        
+        const svg = d3.select("#map")
+            .append("svg")
+            .attr("width", "100%")
+            .attr("height", "100%");
+        
+        const tooltip = d3.select("#tooltip");
+        
+        // GeoJSONデータを読み込む（ローカルファイル）
+        d3.json("japan.geojson")
+            .then(data => {
+                geoData = data;
+                updateMap();
+            })
+            .catch(error => {
+                console.error("GeoJSONの読み込みに失敗しました:", error);
+                alert("地図データの読み込みに失敗しました。japan.geojsonファイルが同じフォルダにあることを確認してください。");
+            });
+        
+        function updateMap() {
+            if (!geoData) return;
+            
+            const yearIndex = parseInt(document.getElementById("yearSlider").value);
+            currentYearIndex = yearIndex;
+            const year = years[yearIndex];
+            const gdp = gdpData[yearIndex];
+            const gdpRatio = (gdp / currentGDP) * 100;
+            const japanCount = gdp / currentGDP; // 日本列島何個分か
+            const areaRatio = gdpRatio; // 国土面積の割合（%）
+            
+            // 統計情報を更新
+            document.getElementById("yearDisplay").textContent = year;
+            document.getElementById("currentGDP").textContent = formatGDP(gdp);
+            document.getElementById("gdpRatio").textContent = gdpRatio.toFixed(1) + "%";
+            document.getElementById("areaRatio").textContent = areaRatio.toFixed(1) + "%";
+            document.getElementById("japanCount").textContent = japanCount.toFixed(2) + "個";
+            
+            // レイアウト（画面幅いっぱい使って日本列島を横に並べる）
+            width = mapElement.clientWidth || width;
+            height = mapElement.clientHeight || 600;
+            svg.attr("width", "100%").attr("height", height);
+            
+            const totalCopies = Math.max(1, Math.min(maxJapanCopies, Math.ceil(japanCount || 1)));
+            const copyWidth = width / totalCopies;
+            
+            // 地図を更新
+            svg.selectAll("*").remove();
+            
+            // 都道府県名のマッピング（GeoJSONの日本語名を使用）
+            const prefectureMap = {};
+            geoData.features.forEach(feature => {
+                const jpName = feature.properties.NL_NAME_1 || prefectureNameMap[feature.properties.NAME_1];
+                if (jpName) {
+                    prefectureMap[feature.properties.NAME_1] = jpName;
+                }
+            });
+            
+            // 各日本列島コピーを描画（枠内に日本全体が収まるようにfitExtentを使用）
+            for (let copyIndex = 0; copyIndex < totalCopies; copyIndex++) {
+                // このコピーに対応する「何％ぶんの日本か」
+                let copyRatio = 0;
+                if (japanCount >= copyIndex + 1) {
+                    copyRatio = 1; // フルに1日本分
+                } else if (japanCount > copyIndex) {
+                    copyRatio = japanCount - copyIndex; // 0〜1の端数ぶん
+                } else {
+                    copyRatio = 0; // まだ到達していない日本
+                }
+                
+                // 都道府県を面積順にソート
+                const sortedPrefectures = [...prefectureAreas].sort((a, b) => b.area - a.area);
+                
+                // 面積が近い都道府県をグループ化（面積差が30%以内なら同じグループ）
+                const groups = [];
+                let currentGroup = [];
+                let currentGroupAvgArea = null;
+                
+                for (const pref of sortedPrefectures) {
+                    if (currentGroup.length === 0) {
+                        currentGroup.push(pref);
+                        currentGroupAvgArea = pref.area;
+                    } else {
+                        // 現在のグループの平均面積との差が30%以内なら同じグループ
+                        const areaDiff = Math.abs(pref.area - currentGroupAvgArea) / currentGroupAvgArea;
+                        if (areaDiff <= 0.3) {
+                            currentGroup.push(pref);
+                            // グループの平均面積を更新
+                            currentGroupAvgArea = currentGroup.reduce((sum, p) => sum + p.area, 0) / currentGroup.length;
+                        } else {
+                            // 新しいグループを開始
+                            groups.push([...currentGroup]);
+                            currentGroup = [pref];
+                            currentGroupAvgArea = pref.area;
+                        }
+                    }
+                }
+                if (currentGroup.length > 0) {
+                    groups.push(currentGroup);
+                }
+                
+                // 各グループの総面積を計算
+                const groupAreas = groups.map(group => ({
+                    group: group,
+                    totalArea: group.reduce((sum, p) => sum + p.area, 0)
+                }));
+                
+                // GDP割合に応じて、グループ単位で塗りつぶす
+                let cumulativeArea = 0;
+                const targetArea = copyRatio * totalArea;
+                const highlightedPrefectures = new Set();
+                const partialPrefectures = new Map(); // 部分的に塗る都道府県（都道府県名 -> 塗る割合）
+                
+                for (const groupArea of groupAreas) {
+                    const groupTotalArea = groupArea.totalArea;
+                    
+                    if (cumulativeArea + groupTotalArea <= targetArea) {
+                        // グループ全体を塗る
+                        groupArea.group.forEach(pref => {
+                            highlightedPrefectures.add(pref.jpName);
+                        });
+                        cumulativeArea += groupTotalArea;
+                    } else if (cumulativeArea < targetArea) {
+                        // グループの一部だけ塗る
+                        const remainingArea = targetArea - cumulativeArea;
+                        const groupRatio = remainingArea / groupTotalArea;
+                        
+                        // グループ内の都道府県を均等に塗る
+                        groupArea.group.forEach(pref => {
+                            const prefRatio = groupRatio;
+                            if (prefRatio >= 1) {
+                                highlightedPrefectures.add(pref.jpName);
+                            } else if (prefRatio > 0) {
+                                partialPrefectures.set(pref.jpName, prefRatio);
+                            }
+                        });
+                        cumulativeArea = targetArea;
+                        break;
+                    } else {
+                        break;
+                    }
+                }
+                
+                const projection = d3.geoMercator();
+                const path = d3.geoPath().projection(projection);
+
+                // このコピー用の描画範囲（左右に分割した枠の中に日本全体が収まるように調整）
+                const left = copyIndex * copyWidth + 10;
+                const right = (copyIndex + 1) * copyWidth - 10;
+                const top = 10;
+                const bottom = height - 10;
+
+                projection.fitExtent(
+                    [[left, top], [right, bottom]],
+                    geoData
+                );
+                
+                const group = svg.append("g").attr("class", "japan-copy");
+                
+                group.selectAll(".prefecture")
+                    .data(geoData.features)
+                    .enter()
+                    .append("path")
+                    .attr("class", "prefecture")
+                    .attr("d", path)
+                    .attr("fill", d => {
+                        const jpName = d.properties.NL_NAME_1 || prefectureNameMap[d.properties.NAME_1];
+                        if (highlightedPrefectures.has(jpName)) {
+                            return "#4CAF50";
+                        } else if (partialPrefectures.has(jpName)) {
+                            // 部分的に塗る場合は、割合に応じて色を調整
+                            const ratio = partialPrefectures.get(jpName);
+                            // 緑とグレーの中間色を計算
+                            const r = Math.round(76 + (224 - 76) * (1 - ratio)); // 4CAF50のR成分76、E0E0E0のR成分224
+                            const g = Math.round(175 + (224 - 175) * (1 - ratio)); // 4CAF50のG成分175、E0E0E0のG成分224
+                            const b = Math.round(80 + (224 - 80) * (1 - ratio)); // 4CAF50のB成分80、E0E0E0のB成分224
+                            return `rgb(${r}, ${g}, ${b})`;
+                        } else {
+                            return "#E0E0E0";
+                        }
+                    })
+                    .attr("stroke", "#fff")
+                    .attr("stroke-width", 0.5)
+                    .on("mouseover", function(event, d) {
+                        const jpName = d.properties.NL_NAME_1 || prefectureNameMap[d.properties.NAME_1];
+                        const isHighlighted = highlightedPrefectures.has(jpName);
+                        const partialRatio = partialPrefectures.get(jpName);
+                        let statusText = "";
+                        if (isHighlighted) {
+                            statusText = "✓ 該当年のGDPに相当";
+                        } else if (partialRatio !== undefined) {
+                            statusText = `△ 該当年のGDPの${(partialRatio * 100).toFixed(1)}%に相当`;
+                        } else {
+                            statusText = "該当年のGDPに相当しない";
+                        }
+                        tooltip
+                            .style("display", "block")
+                            .style("left", (event.pageX + 10) + "px")
+                            .style("top", (event.pageY - 10) + "px")
+                            .html(`<strong>${jpName}</strong><br/>${statusText}`);
+                    })
+                    .on("mouseout", function() {
+                        tooltip.style("display", "none");
+                    });
+            }
+        }
+        
+        function formatGDP(value) {
+            if (value >= 1e12) {
+                return "$" + (value / 1e12).toFixed(2) + "兆";
+            } else if (value >= 1e11) {
+                return "$" + (value / 1e11).toFixed(2) + "千億";
+            } else if (value >= 1e10) {
+                return "$" + (value / 1e10).toFixed(2) + "百億";
+            } else {
+                return "$" + (value / 1e9).toFixed(2) + "十億";
+            }
+        }
+        
+        // スライダーのイベント
+        document.getElementById("yearSlider").addEventListener("input", updateMap);
+        
+        // 再生ボタンのイベント
+        document.getElementById("playBtn").addEventListener("click", function() {
+            if (isPlaying) {
+                clearInterval(playInterval);
+                this.textContent = "▶ 再生";
+                isPlaying = false;
+            } else {
+                this.textContent = "⏸ 停止";
+                isPlaying = true;
+                playInterval = setInterval(() => {
+                    let nextIndex = currentYearIndex - 1;
+                    if (nextIndex < 0) {
+                        nextIndex = 64;
+                    }
+                    document.getElementById("yearSlider").value = nextIndex;
+                    updateMap();
+                }, 500);
+            }
+        });
+        
+        // 初期表示
+        updateMap();
+    </script>
+</body>
+</html>
+
